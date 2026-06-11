@@ -308,10 +308,10 @@
 
 <script>
 // ============================================================
-// DATA: 48 Länder mit Gruppen und globalen Startnummern
-// (abgeleitet aus dem Panini WM 2026 Inhaltsverzeichnis)
+// DATA: 48 Länder + FWC Extra-Sticker
 // ============================================================
 const COUNTRIES = [
+  {name:"FWC Extra",flag:"🏆",code:"FWC",group:"Extra",start:0,count:21},
   {name:"Mexiko",flag:"🇲🇽",code:"MEX",group:"A",start:1},
   {name:"Südafrika",flag:"🇿🇦",code:"RSA",group:"A",start:21},
   {name:"Südkorea",flag:"🇰🇷",code:"KOR",group:"A",start:41},
@@ -362,7 +362,7 @@ const COUNTRIES = [
   {name:"Panama",flag:"🇵🇦",code:"PAN",group:"L",start:941},
 ];
 
-const TOTAL = COUNTRIES.length * 20; // 960
+const TOTAL = COUNTRIES.reduce((s,c) => s + (c.count || 20), 0); // 960 + 21 FWC
 let myData = {}; // { "USA-3": 1 (owned) | 2 (double) }
 let currentUser = '';
 let firebaseUrl = '';
@@ -382,7 +382,7 @@ function toggleGuide() {
 
 function startApp() {
   const name = document.getElementById('setup-name').value.trim();
-  const fb = document.getElementById('setup-firebase').value.trim();
+  const fb = document.getElementById('setup-firebase').value.trim() || DEFAULT_FIREBASE;
   const ak = document.getElementById('setup-apikey').value.trim();
   if (!name) { alert('Bitte gib deinen Namen ein!'); return; }
   currentUser = name;
@@ -408,14 +408,15 @@ function logout() {
 }
 
 // Pre-fill from localStorage
+const DEFAULT_FIREBASE = 'https://paninitausch26-default-rtdb.firebaseio.com';
 window.addEventListener('DOMContentLoaded', () => {
   const n = localStorage.getItem('panini_user');
-  const f = localStorage.getItem('panini_firebase');
+  const f = localStorage.getItem('panini_firebase') || DEFAULT_FIREBASE;
   const a = localStorage.getItem('panini_apikey');
   if (n) document.getElementById('setup-name').value = n;
-  if (f) document.getElementById('setup-firebase').value = f;
+  document.getElementById('setup-firebase').value = f;
   if (a) document.getElementById('setup-apikey').value = a;
-  if (n && f) startApp();
+  if (n) startApp();
 });
 
 // ============================================================
@@ -423,7 +424,11 @@ window.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 function buildStickers(c) {
   const arr = [];
-  for (let i = 1; i <= 20; i++) arr.push({ id: `${c.code}-${i}`, num: i, globalNum: c.start + i - 1 });
+  const startNum = c.code === 'FWC' ? 0 : 1;
+  const count = c.count || 20;
+  for (let i = startNum; i < startNum + count; i++) {
+    arr.push({ id: `${c.code}-${i}`, num: i, globalNum: c.start + i });
+  }
   return arr;
 }
 const ALL_IDS = COUNTRIES.flatMap(c => buildStickers(c).map(s => s.id));
@@ -536,7 +541,7 @@ function renderCollection() {
       return true;
     });
     if (!filtered.length) continue;
-    html += `<div class="group-label">Gruppe ${g}</div>`;
+    html += `<div class="group-label">${g === 'Extra' ? '🏆 Extra-Sticker' : 'Gruppe ' + g}</div>`;
     for (const c of filtered) {
       const stickers = buildStickers(c);
       const owned = stickers.filter(s => getSt(s.id) >= 1).length;
@@ -691,7 +696,12 @@ Schreibe nichts außer dem JSON.`;
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-opus-4-5',
         max_tokens: 2000,
