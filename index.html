@@ -293,6 +293,9 @@
   <!-- TRADE TAB -->
   <div id="tab-trade" class="content" style="display:none">
     <div id="trade-loading" class="loading-spinner">Lade Tauschbörse…</div>
+    <div id="trade-pdf-bar" style="display:none;margin-bottom:1rem">
+      <button onclick="downloadTradePDF()" style="padding:.6rem 1.1rem;border-radius:8px;background:#1a56a0;color:#fff;border:none;font-size:.88rem;font-weight:600;cursor:pointer">📄 Tauschzettel als PDF herunterladen</button>
+    </div>
     <div id="trade-content" class="trade-section" style="display:none"></div>
   </div>
 </div>
@@ -608,9 +611,34 @@ function renderDoubles() {
 // ============================================================
 // TRADE TAB
 // ============================================================
+
+// Groups sticker IDs by country name for display
+function groupByCountry(ids) {
+  const grouped = [];
+  for (const c of COUNTRIES) {
+    const matching = ids.filter(id => id.startsWith(c.code + '-'));
+    if (!matching.length) continue;
+    const nums = matching.map(id => parseInt(id.split('-')[1])).sort((a,b)=>a-b);
+    grouped.push({ country: c, nums });
+  }
+  return grouped;
+}
+
+function renderGroupedStickers(grouped, chipClass) {
+  return grouped.map(({country, nums}) =>
+    `<div style="margin-bottom:6px">
+      <span style="font-size:.78rem;font-weight:600;color:var(--muted);margin-right:6px">${country.flag} ${country.name}:</span>
+      ${nums.map(n => `<span class="chip ${chipClass}" style="margin:1px">${n}</span>`).join('')}
+    </div>`
+  ).join('');
+}
+
+let tradeDataCache = null;
+
 async function renderTrade() {
   document.getElementById('trade-loading').style.display = 'block';
   document.getElementById('trade-content').style.display = 'none';
+  document.getElementById('trade-pdf-bar').style.display = 'none';
   await loadAllUsers();
   document.getElementById('trade-loading').style.display = 'none';
   document.getElementById('trade-content').style.display = 'flex';
@@ -621,13 +649,15 @@ async function renderTrade() {
 
   if (!others.length) {
     document.getElementById('trade-content').innerHTML = `<div class="no-result">
-      ${firebaseUrl ? '😕 Noch keine anderen Sammler eingetragen.' : '⚠️ Keine Firebase-URL angegeben — Tauschbörse funktioniert nur mit Firebase.'}<br><br>
-      Teile die App-URL mit deinen Freunden, damit sie sich einloggen und ihre Sticker eintragen können!
+      ${firebaseUrl ? '😕 Noch keine anderen Sammler eingetragen.' : '⚠️ Keine Firebase-URL angegeben.'}<br><br>
+      Teile die App-URL mit deinen Freunden!
     </div>`;
     return;
   }
 
+  tradeDataCache = [];
   let html = '';
+
   for (const [name, data] of others) {
     const theirDoubles = new Set(ALL_IDS.filter(id => (data[id] || 0) === 2));
     const theirMissing = new Set(ALL_IDS.filter(id => (data[id] || 0) === 0));
@@ -635,24 +665,95 @@ async function renderTrade() {
     const theyCanGive = [...theirDoubles].filter(id => myMissing.has(id));
     if (!iCanGive.length && !theyCanGive.length) continue;
 
-    html += `<div class="trade-card"><h3>🤝 Tausch mit <strong>${name}</strong></h3>`;
-    if (iCanGive.length && theyCanGive.length) html += `<div class="match-badge">↕ ${iCanGive.length + theyCanGive.length} Tauschkarten möglich</div>`;
+    tradeDataCache.push({ name, iCanGive, theyCanGive });
+
+    const iCanGiveGrouped = groupByCountry(iCanGive);
+    const theyCanGiveGrouped = groupByCountry(theyCanGive);
+
+    html += `<div class="trade-card">
+      <h3 style="margin-bottom:.75rem">🤝 Tausch mit <strong>${name}</strong>
+        <span style="font-size:.78rem;font-weight:400;color:var(--muted);margin-left:8px">${iCanGive.length + theyCanGive.length} Sticker gesamt</span>
+      </h3>`;
+
     if (theyCanGive.length) {
-      html += `<div class="trade-sub">⬇ Du kannst bekommen von ${name} (${theyCanGive.length})</div><div class="chips">`;
-      html += theyCanGive.slice(0, 50).map(id => { const c = COUNTRIES.find(x => id.startsWith(x.code + '-')); const n = id.split('-')[1]; return `<span class="chip offer">#${c ? c.start + parseInt(n) - 1 : '?'} ${id}</span>`; }).join('');
-      if (theyCanGive.length > 50) html += `<span class="chip">+${theyCanGive.length - 50} weitere</span>`;
-      html += '</div>';
+      html += `<div class="trade-sub" style="margin-bottom:.5rem">⬇ ${name} gibt dir (${theyCanGive.length})</div>
+        <div style="margin-bottom:1rem">${renderGroupedStickers(theyCanGiveGrouped, 'offer')}</div>`;
     }
     if (iCanGive.length) {
-      html += `<div class="trade-sub">⬆ Du kannst geben an ${name} (${iCanGive.length})</div><div class="chips">`;
-      html += iCanGive.slice(0, 50).map(id => { const c = COUNTRIES.find(x => id.startsWith(x.code + '-')); const n = id.split('-')[1]; return `<span class="chip want">#${c ? c.start + parseInt(n) - 1 : '?'} ${id}</span>`; }).join('');
-      if (iCanGive.length > 50) html += `<span class="chip">+${iCanGive.length - 50} weitere</span>`;
-      html += '</div>';
+      html += `<div class="trade-sub" style="margin-bottom:.5rem">⬆ Du gibst ${name} (${iCanGive.length})</div>
+        <div>${renderGroupedStickers(iCanGiveGrouped, 'want')}</div>`;
     }
     html += '</div>';
   }
-  if (!html) html = '<div class="no-result">Keine passenden Tauschpartner gefunden.<br>Sobald Freunde ihre Doppelten eingetragen haben, erscheinen hier Vorschläge!</div>';
+
+  if (!html) {
+    html = '<div class="no-result">Keine passenden Tauschpartner gefunden.<br>Sobald Freunde ihre Doppelten eingetragen haben, erscheinen hier Vorschläge!</div>';
+  } else {
+    document.getElementById('trade-pdf-bar').style.display = 'block';
+  }
   document.getElementById('trade-content').innerHTML = html;
+}
+
+function downloadTradePDF() {
+  if (!tradeDataCache || !tradeDataCache.length) return;
+  const today = new Date().toLocaleDateString('de-DE');
+
+  let body = '';
+  for (const { name, iCanGive, theyCanGive } of tradeDataCache) {
+    const iGrouped = groupByCountry(iCanGive);
+    const theyGrouped = groupByCountry(theyCanGive);
+
+    body += `<div class="section">
+      <h2>Tausch mit ${name}</h2>`;
+
+    if (theyCanGive.length) {
+      body += `<h3 class="give">&#8595; ${name} gibt mir (${theyCanGive.length} Sticker)</h3><table>`;
+      for (const {country, nums} of theyGrouped) {
+        body += `<tr><td class="country">${country.flag} ${country.name}</td><td class="nums">${nums.join(', ')}</td></tr>`;
+      }
+      body += '</table>';
+    }
+    if (iCanGive.length) {
+      body += `<h3 class="want">&#8593; Ich gebe ${name} (${iCanGive.length} Sticker)</h3><table>`;
+      for (const {country, nums} of iGrouped) {
+        body += `<tr><td class="country">${country.flag} ${country.name}</td><td class="nums">${nums.join(', ')}</td></tr>`;
+      }
+      body += '</table>';
+    }
+    body += '</div>';
+  }
+
+  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"/>
+  <title>Panini WM 2026 Tauschzettel</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20px; max-width: 700px; margin: 0 auto; }
+    h1 { font-size: 16px; border-bottom: 2px solid #2d7a3a; padding-bottom: 6px; margin-bottom: 4px; }
+    .meta { color: #666; font-size: 10px; margin-bottom: 20px; }
+    .section { margin-bottom: 24px; page-break-inside: avoid; }
+    h2 { font-size: 13px; background: #f0f0f0; padding: 5px 8px; border-radius: 4px; margin: 0 0 8px; }
+    h3 { font-size: 11px; margin: 10px 0 5px; font-weight: 700; }
+    h3.give { color: #2d7a3a; }
+    h3.want { color: #b83232; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    td { padding: 3px 6px; vertical-align: top; }
+    td.country { width: 160px; font-weight: 600; white-space: nowrap; }
+    td.nums { color: #444; }
+    tr:nth-child(even) { background: #fafafa; }
+    @media print { body { padding: 0; } }
+  </style></head><body>
+  <h1>⚽ WM 2026 Panini — Tauschzettel</h1>
+  <div class="meta">Erstellt am ${today} · ${currentUser}</div>
+  ${body}
+  <script>window.onload = () => window.print();<\/script>
+  </body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Tauschzettel-WM2026.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ============================================================
