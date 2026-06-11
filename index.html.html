@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>⚽ WM 2026 Panini-Tracker</title>
+<style>
+  :root {
+    --green: #2d7a3a; --green-light: #e8f5ea; --green-border: #6abf76;
+    --amber: #c47a0a; --amber-light: #fff3dc; --amber-border: #e8b84b;
+    --red: #b83232; --red-light: #fdeaea; --red-border: #e88080;
+    --blue: #1a56a0; --blue-light: #e8f0fb; --blue-border: #6fa3e8;
+    --gray: #5a5a5a; --gray-light: #f5f5f5; --gray-border: #d0d0d0;
+    --bg: #f8f9fa; --card: #ffffff; --text: #1a1a1a; --muted: #666;
+    --radius: 10px; --radius-sm: 6px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* SETUP SCREEN */
+  #setup-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
+  .setup-card { background: var(--card); border-radius: 16px; padding: 2.5rem 2rem; max-width: 480px; width: 100%; box-shadow: var(--shadow); border: 1px solid var(--gray-border); }
+  .setup-logo { font-size: 3rem; text-align: center; margin-bottom: .5rem; }
+  .setup-title { font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: .25rem; }
+  .setup-sub { text-align: center; color: var(--muted); font-size: .9rem; margin-bottom: 2rem; }
+  .setup-label { font-size: .85rem; font-weight: 600; color: var(--gray); margin-bottom: .5rem; display: block; }
+  .setup-input { width: 100%; padding: .65rem .9rem; border-radius: var(--radius-sm); border: 1.5px solid var(--gray-border); font-size: .95rem; margin-bottom: 1.25rem; outline: none; transition: border .15s; }
+  .setup-input:focus { border-color: var(--blue); }
+  .setup-btn { width: 100%; padding: .75rem; border-radius: var(--radius-sm); background: var(--green); color: #fff; border: none; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .15s; }
+  .setup-btn:hover { background: #235e2c; }
+  .setup-note { font-size: .78rem; color: var(--muted); text-align: center; margin-top: 1rem; }
+  .setup-divider { text-align: center; color: var(--muted); font-size: .8rem; margin: 1rem 0; }
+
+  /* FIREBASE CONFIG */
+  .config-toggle { font-size: .8rem; color: var(--blue); cursor: pointer; text-align: center; margin-top: .75rem; }
+  .config-box { background: var(--gray-light); border-radius: var(--radius-sm); padding: 1rem; margin-top: .75rem; font-size: .82rem; display: none; }
+  .config-box.open { display: block; }
+  .config-box p { color: var(--muted); margin-bottom: .75rem; line-height: 1.5; }
+  .config-box input { width: 100%; padding: .5rem .75rem; border-radius: 4px; border: 1px solid var(--gray-border); font-size: .82rem; margin-bottom: .5rem; }
+
+  /* APP LAYOUT */
+  #app-screen { display: none; flex-direction: column; min-height: 100vh; }
+  .app-header { background: var(--green); color: #fff; padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .app-header h1 { font-size: 1.1rem; font-weight: 700; flex: 1; }
+  .user-badge { font-size: .8rem; background: rgba(255,255,255,.2); padding: .3rem .7rem; border-radius: 20px; }
+  .logout-btn { font-size: .75rem; background: rgba(255,255,255,.15); border: none; color: #fff; padding: .3rem .7rem; border-radius: 20px; cursor: pointer; }
+
+  /* STATS BAR */
+  .stats-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 1rem; background: var(--card); border-bottom: 1px solid var(--gray-border); }
+  .stat { text-align: center; }
+  .stat-num { font-size: 1.4rem; font-weight: 700; }
+  .stat-num.g { color: var(--green); } .stat-num.r { color: var(--red); } .stat-num.a { color: var(--amber); }
+  .stat-label { font-size: .65rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+  /* PROGRESS BAR */
+  .global-progress { height: 5px; background: #e0e0e0; }
+  .global-progress-fill { height: 5px; background: var(--green); transition: width .4s; }
+
+  /* TABS */
+  .tabs { display: flex; background: var(--card); border-bottom: 2px solid var(--gray-border); overflow-x: auto; }
+  .tab { flex: 1; min-width: 70px; padding: .65rem .5rem; font-size: .8rem; font-weight: 600; text-align: center; border: none; background: transparent; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all .15s; }
+  .tab.active { color: var(--green); border-bottom-color: var(--green); }
+
+  /* CONTENT */
+  .content { padding: 1rem; max-width: 1100px; margin: 0 auto; width: 100%; }
+
+  /* FILTER BAR */
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .filter-bar input { flex: 1; min-width: 160px; padding: .5rem .8rem; border-radius: var(--radius-sm); border: 1px solid var(--gray-border); font-size: .88rem; outline: none; }
+  .filter-bar input:focus { border-color: var(--blue); }
+  .fbtn { font-size: .78rem; padding: .4rem .85rem; border-radius: 20px; border: 1px solid var(--gray-border); background: var(--card); color: var(--muted); cursor: pointer; transition: all .12s; white-space: nowrap; }
+  .fbtn.active { background: var(--green); color: #fff; border-color: var(--green); }
+
+  /* LEGEND */
+  .legend { display: flex; gap: 12px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: .78rem; color: var(--muted); }
+  .ldot { width: 14px; height: 14px; border-radius: 3px; border: 1px solid; }
+
+  /* COUNTRY GRID */
+  .country-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .group-label { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; grid-column: 1/-1; margin-top: .5rem; padding: .25rem .5rem; background: var(--gray-light); border-radius: 4px; }
+  .ccard { background: var(--card); border: 1px solid var(--gray-border); border-radius: var(--radius); padding: 11px 13px; }
+  .ccard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+  .ccard-name { font-size: .88rem; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .cflag { font-size: 1.1rem; }
+  .ccard-nums { font-size: .7rem; color: var(--muted); }
+  .cpbar { height: 3px; background: #e8e8e8; border-radius: 2px; margin-bottom: 7px; }
+  .cpbar-fill { height: 3px; border-radius: 2px; background: var(--green); transition: width .3s; }
+  .stickers-row { display: flex; flex-wrap: wrap; gap: 3px; }
+  .sbtn { width: 28px; height: 26px; border-radius: 4px; border: 1px solid var(--gray-border); font-size: .72rem; cursor: pointer; background: var(--gray-light); color: var(--muted); font-weight: 600; position: relative; transition: all .1s; }
+  .sbtn:hover { border-color: #888; }
+  .sbtn.owned { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
+  .sbtn.double { background: var(--amber-light); border-color: var(--amber-border); color: var(--amber); }
+  .sbtn.double::after { content: '²'; font-size: 8px; position: absolute; top: 0px; right: 1px; opacity: .8; }
+
+  /* CHIPS */
+  .section-title { font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin: 1rem 0 .5rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { font-size: .75rem; padding: 3px 8px; border-radius: 4px; background: var(--gray-light); border: 1px solid var(--gray-border); color: var(--muted); }
+  .chip.offer { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
+  .chip.want { background: var(--red-light); border-color: var(--red-border); color: var(--red); }
+
+  /* SCAN SECTION */
+  .scan-card { background: var(--card); border: 1px solid var(--gray-border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+  .scan-card h2 { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; }
+  .scan-card p { font-size: .85rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.5; }
+  .upload-zone { border: 2px dashed var(--gray-border); border-radius: var(--radius); padding: 2rem; text-align: center; cursor: pointer; transition: all .2s; margin-bottom: 1rem; }
+  .upload-zone:hover { border-color: var(--blue); background: var(--blue-light); }
+  .upload-zone.drag { border-color: var(--blue); background: var(--blue-light); }
+  .upload-icon { font-size: 2rem; margin-bottom: .5rem; }
+  .upload-text { font-size: .88rem; color: var(--muted); }
+  #file-input { display: none; }
+  .preview-img { max-width: 100%; max-height: 300px; border-radius: var(--radius-sm); margin-bottom: 1rem; display: none; }
+  .scan-btn { padding: .65rem 1.25rem; border-radius: var(--radius-sm); background: var(--blue); color: #fff; border: none; font-size: .9rem; font-weight: 600; cursor: pointer; transition: background .15s; display: none; }
+  .scan-btn:hover { background: #1340a0; }
+  .scan-btn:disabled { background: var(--gray); cursor: not-allowed; }
+  .apikey-note { font-size: .78rem; color: var(--muted); margin-top: .75rem; padding: .6rem .9rem; background: var(--amber-light); border-radius: var(--radius-sm); border: 1px solid var(--amber-border); }
+  .apikey-note a { color: var(--amber); }
+  .scan-result { background: var(--green-light); border: 1px solid var(--green-border); border-radius: var(--radius-sm); padding: .9rem 1rem; margin-top: .75rem; font-size: .85rem; line-height: 1.6; display: none; }
+  .scan-result h3 { font-size: .9rem; font-weight: 700; color: var(--green); margin-bottom: .5rem; }
+  .scan-error { background: var(--red-light); border: 1px solid var(--red-border); border-radius: var(--radius-sm); padding: .9rem 1rem; margin-top: .75rem; font-size: .85rem; color: var(--red); display: none; }
+  .api-input-row { display: flex; gap: 8px; margin-bottom: 1rem; align-items: center; }
+  .api-input-row input { flex: 1; padding: .55rem .8rem; border-radius: var(--radius-sm); border: 1px solid var(--gray-border); font-size: .82rem; font-family: monospace; outline: none; }
+  .api-input-row input:focus { border-color: var(--blue); }
+  .api-save-btn { padding: .55rem 1rem; border-radius: var(--radius-sm); background: var(--gray-light); border: 1px solid var(--gray-border); font-size: .82rem; cursor: pointer; white-space: nowrap; }
+
+  /* TRADE */
+  .trade-section { display: flex; flex-direction: column; gap: 12px; }
+  .trade-card { background: var(--card); border: 1px solid var(--gray-border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+  .trade-card h3 { font-size: .95rem; font-weight: 700; margin-bottom: .6rem; }
+  .trade-sub { font-size: .78rem; font-weight: 700; color: var(--muted); margin: .6rem 0 .3rem; }
+  .match-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .75rem; padding: .25rem .7rem; border-radius: 20px; background: var(--green-light); color: var(--green); margin-bottom: .6rem; border: 1px solid var(--green-border); font-weight: 600; }
+  .no-result { text-align: center; padding: 2rem; color: var(--muted); font-size: .9rem; }
+  .loading-spinner { text-align: center; padding: 2rem; font-size: .9rem; color: var(--muted); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 999; display: none; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--card); border-radius: var(--radius); padding: 1.5rem; max-width: 440px; width: 100%; }
+  .modal h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+  .modal p { font-size: .88rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.6; }
+  .modal-btn { padding: .6rem 1.2rem; border-radius: var(--radius-sm); background: var(--green); color: #fff; border: none; font-size: .9rem; font-weight: 600; cursor: pointer; }
+
+  @media (max-width: 500px) {
+    .stats-bar { grid-template-columns: repeat(3, 1fr); }
+    .stat:nth-child(4), .stat:nth-child(5) { display: none; }
+    .country-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== SETUP SCREEN ===== -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-logo">⚽</div>
+    <div class="setup-title">WM 2026 Panini-Tracker</div>
+    <div class="setup-sub">Verwalte deine Sticker und tausche mit Freunden</div>
+
+    <label class="setup-label">Dein Name (für die Tauschbörse)</label>
+    <input class="setup-input" id="setup-name" placeholder="z.B. Max Mustermann" maxlength="30"/>
+
+    <label class="setup-label">Firebase-Datenbank URL <span style="font-weight:400;color:var(--muted)">(für geteilte Tauschbörse)</span></label>
+    <input class="setup-input" id="setup-firebase" placeholder="https://dein-projekt-default-rtdb.firebaseio.com" />
+
+    <label class="setup-label" style="margin-top:.25rem">Claude API-Key <span style="font-weight:400;color:var(--muted)">(für Foto-Erkennung, optional)</span></label>
+    <input class="setup-input" id="setup-apikey" type="password" placeholder="sk-ant-..." />
+
+    <button class="setup-btn" onclick="startApp()">Loslegen →</button>
+    <p class="setup-note">Dein Name und deine Einstellungen werden lokal in deinem Browser gespeichert. Die Sticker-Daten werden in deiner Firebase-Datenbank geteilt.</p>
+
+    <div class="config-toggle" onclick="toggleGuide()">📖 Schritt-für-Schritt Anleitung (Firebase + GitHub Pages)</div>
+    <div class="config-box" id="guide-box">
+      <p><strong>1. Firebase Datenbank einrichten (kostenlos):</strong><br>
+      → <a href="https://console.firebase.google.com" target="_blank" style="color:var(--blue)">console.firebase.google.com</a> öffnen<br>
+      → "Neues Projekt erstellen" → Projekt-Name eingeben<br>
+      → Links: "Realtime Database" → "Datenbank erstellen" → Testmodus wählen<br>
+      → Die URL oben (z.B. <code>https://xxx-rtdb.firebaseio.com</code>) hier eintragen</p>
+
+      <p><strong>2. App auf GitHub Pages hosten:</strong><br>
+      → GitHub-Account erstellen → "New Repository" → Name: <code>panini-wm2026</code><br>
+      → Diese HTML-Datei hochladen (oder per git push)<br>
+      → Settings → Pages → Branch: main → Save<br>
+      → Deine URL: <code>https://deinname.github.io/panini-wm2026</code><br>
+      → Diese URL mit Freunden teilen — fertig!</p>
+
+      <p><strong>3. Claude API Key (für Foto-Erkennung):</strong><br>
+      → <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue)">console.anthropic.com</a> → API Keys → Create Key<br>
+      → Key beginnt mit <code>sk-ant-...</code></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APP SCREEN ===== -->
+<div id="app-screen">
+  <header class="app-header">
+    <span style="font-size:1.4rem">⚽</span>
+    <h1>WM 2026 Panini</h1>
+    <span class="user-badge" id="header-user">–</span>
+    <button class="logout-btn" onclick="logout()">⚙ Einstellungen</button>
+  </header>
+
+  <div class="global-progress"><div class="global-progress-fill" id="gbar" style="width:0%"></div></div>
+
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-num" id="st-total">0</div><div class="stat-label">Gesamt</div></div>
+    <div class="stat"><div class="stat-num g" id="st-owned">0</div><div class="stat-label">Gesammelt</div></div>
+    <div class="stat"><div class="stat-num r" id="st-missing">0</div><div class="stat-label">Fehlend</div></div>
+    <div class="stat"><div class="stat-num a" id="st-doubles">0</div><div class="stat-label">Doppelt</div></div>
+    <div class="stat"><div class="stat-num" id="st-pct">0%</div><div class="stat-label">Fertig</div></div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab active" onclick="switchTab('collection',this)">📋 Sammlung</button>
+    <button class="tab" onclick="switchTab('scan',this)">📷 Foto-Scan</button>
+    <button class="tab" onclick="switchTab('missing',this)">❌ Fehlende</button>
+    <button class="tab" onclick="switchTab('doubles',this)">🔄 Doppelte</button>
+    <button class="tab" onclick="switchTab('trade',this)">🤝 Tauschbörse</button>
+  </nav>
+
+  <!-- COLLECTION TAB -->
+  <div id="tab-collection" class="content">
+    <div class="legend">
+      <div class="legend-item"><div class="ldot" style="background:var(--gray-light);border-color:var(--gray-border)"></div>Fehlt</div>
+      <div class="legend-item"><div class="ldot" style="background:var(--green-light);border-color:var(--green-border)"></div>Vorhanden (1×)</div>
+      <div class="legend-item"><div class="ldot" style="background:var(--amber-light);border-color:var(--amber-border)"></div>Doppelt (2× klicken = 3× zurücksetzen)</div>
+    </div>
+    <div class="filter-bar">
+      <input id="search" placeholder="Land suchen…" oninput="renderCollection()"/>
+      <button class="fbtn active" onclick="setFilter('all',this)">Alle</button>
+      <button class="fbtn" onclick="setFilter('incomplete',this)">Unvollständig</button>
+      <button class="fbtn" onclick="setFilter('complete',this)">Vollständig</button>
+    </div>
+    <div class="country-grid" id="cgrid"></div>
+  </div>
+
+  <!-- SCAN TAB -->
+  <div id="tab-scan" class="content" style="display:none">
+    <div class="scan-card">
+      <h2>📷 Foto-Erkennung mit KI</h2>
+      <p>Fotografiere eine Seite deines Heftes und lade das Bild hoch. Die KI erkennt automatisch, welche Sticker eingeklebt sind (ausgefüllt) und welche noch fehlen (leer).</p>
+
+      <label class="setup-label">Claude API Key</label>
+      <div class="api-input-row">
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+        <button class="api-save-btn" onclick="saveApiKey()">💾 Speichern</button>
+      </div>
+
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">Klicken oder Foto hierher ziehen<br><small style="color:#aaa">JPG, PNG – eine Heftseite pro Bild</small></div>
+      </div>
+      <input type="file" id="file-input" accept="image/*" onchange="handleFile(this.files[0])"/>
+
+      <img id="preview-img" class="preview-img"/>
+      <br/>
+      <button class="scan-btn" id="scan-btn" onclick="scanImage()">🔍 Sticker erkennen</button>
+
+      <div class="apikey-note" id="apikey-note" style="display:none">
+        ⚠️ Kein API Key gespeichert. Hol dir einen kostenlosen Key auf <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> und trag ihn oben ein.
+      </div>
+
+      <div class="scan-result" id="scan-result">
+        <h3>✅ Erkennung abgeschlossen</h3>
+        <div id="scan-result-text"></div>
+      </div>
+      <div class="scan-error" id="scan-error"></div>
+    </div>
+
+    <div class="scan-card">
+      <h2>ℹ️ Tipps für gute Ergebnisse</h2>
+      <p>• Fotografiere die Seite gerade von oben, ohne Schatten<br>
+      • Beide Seiten des aufgeschlagenen Heftes nacheinander scannen<br>
+      • Das Bild sollte scharf und gut beleuchtet sein<br>
+      • Die KI erkennt anhand der Stickernummern im Heft, welche Plätze leer oder gefüllt sind<br>
+      • Nach dem Scan kannst du die Ergebnisse manuell korrigieren</p>
+    </div>
+  </div>
+
+  <!-- MISSING TAB -->
+  <div id="tab-missing" class="content" style="display:none">
+    <div class="section-title">Fehlende Sticker</div>
+    <div id="missing-list" class="chips"></div>
+  </div>
+
+  <!-- DOUBLES TAB -->
+  <div id="tab-doubles" class="content" style="display:none">
+    <div class="section-title">Doppelte Sticker — zum Tauschen anbieten</div>
+    <div id="doubles-list" class="chips"></div>
+  </div>
+
+  <!-- TRADE TAB -->
+  <div id="tab-trade" class="content" style="display:none">
+    <div id="trade-loading" class="loading-spinner">Lade Tauschbörse…</div>
+    <div id="trade-content" class="trade-section" style="display:none"></div>
+  </div>
+</div>
+
+<!-- SUCCESS MODAL -->
+<div class="modal-overlay" id="scan-modal">
+  <div class="modal">
+    <h2>✅ Sticker aktualisiert!</h2>
+    <p id="modal-text">Die erkannten Sticker wurden in deine Sammlung übernommen.</p>
+    <button class="modal-btn" onclick="document.getElementById('scan-modal').classList.remove('open')">OK</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA: 48 Länder mit Gruppen und globalen Startnummern
+// (abgeleitet aus dem Panini WM 2026 Inhaltsverzeichnis)
+// ============================================================
+const COUNTRIES = [
+  {name:"Mexiko",flag:"🇲🇽",code:"MEX",group:"A",start:1},
+  {name:"Südafrika",flag:"🇿🇦",code:"RSA",group:"A",start:21},
+  {name:"Südkorea",flag:"🇰🇷",code:"KOR",group:"A",start:41},
+  {name:"Tschechien",flag:"🇨🇿",code:"CZE",group:"A",start:61},
+  {name:"Kanada",flag:"🇨🇦",code:"CAN",group:"B",start:81},
+  {name:"Bosnien-Herzegowina",flag:"🇧🇦",code:"BIH",group:"B",start:101},
+  {name:"Katar",flag:"🇶🇦",code:"QAT",group:"B",start:121},
+  {name:"Schweiz",flag:"🇨🇭",code:"SUI",group:"B",start:141},
+  {name:"Brasilien",flag:"🇧🇷",code:"BRA",group:"C",start:161},
+  {name:"Marokko",flag:"🇲🇦",code:"MAR",group:"C",start:181},
+  {name:"Haiti",flag:"🇭🇹",code:"HAI",group:"C",start:201},
+  {name:"Schottland",flag:"🏴󠁧󠁢󠁳󠁣󠁴󠁿",code:"SCO",group:"C",start:221},
+  {name:"USA",flag:"🇺🇸",code:"USA",group:"D",start:241},
+  {name:"Paraguay",flag:"🇵🇾",code:"PAR",group:"D",start:261},
+  {name:"Australien",flag:"🇦🇺",code:"AUS",group:"D",start:281},
+  {name:"Türkiye",flag:"🇹🇷",code:"TUR",group:"D",start:301},
+  {name:"Deutschland",flag:"🇩🇪",code:"GER",group:"E",start:321},
+  {name:"Curaçao",flag:"🇨🇼",code:"CUW",group:"E",start:341},
+  {name:"Elfenbeinküste",flag:"🇨🇮",code:"CIV",group:"E",start:361},
+  {name:"Ecuador",flag:"🇪🇨",code:"ECU",group:"E",start:381},
+  {name:"Niederlande",flag:"🇳🇱",code:"NED",group:"F",start:401},
+  {name:"Japan",flag:"🇯🇵",code:"JPN",group:"F",start:421},
+  {name:"Schweden",flag:"🇸🇪",code:"SWE",group:"F",start:441},
+  {name:"Tunesien",flag:"🇹🇳",code:"TUN",group:"F",start:461},
+  {name:"Belgien",flag:"🇧🇪",code:"BEL",group:"G",start:481},
+  {name:"Ägypten",flag:"🇪🇬",code:"EGY",group:"G",start:501},
+  {name:"Iran",flag:"🇮🇷",code:"IRN",group:"G",start:521},
+  {name:"Neuseeland",flag:"🇳🇿",code:"NZL",group:"G",start:541},
+  {name:"Spanien",flag:"🇪🇸",code:"ESP",group:"H",start:561},
+  {name:"Cabo Verde",flag:"🇨🇻",code:"CPV",group:"H",start:581},
+  {name:"Saudi-Arabien",flag:"🇸🇦",code:"KSA",group:"H",start:601},
+  {name:"Uruguay",flag:"🇺🇾",code:"URU",group:"H",start:621},
+  {name:"Frankreich",flag:"🇫🇷",code:"FRA",group:"I",start:641},
+  {name:"Senegal",flag:"🇸🇳",code:"SEN",group:"I",start:661},
+  {name:"Irak",flag:"🇮🇶",code:"IRQ",group:"I",start:681},
+  {name:"Norwegen",flag:"🇳🇴",code:"NOR",group:"I",start:701},
+  {name:"Argentinien",flag:"🇦🇷",code:"ARG",group:"J",start:721},
+  {name:"Algerien",flag:"🇩🇿",code:"ALG",group:"J",start:741},
+  {name:"Österreich",flag:"🇦🇹",code:"AUT",group:"J",start:761},
+  {name:"Jordanien",flag:"🇯🇴",code:"JOR",group:"J",start:781},
+  {name:"Portugal",flag:"🇵🇹",code:"POR",group:"K",start:801},
+  {name:"Kongo DR",flag:"🇨🇩",code:"COD",group:"K",start:821},
+  {name:"Usbekistan",flag:"🇺🇿",code:"UZB",group:"K",start:841},
+  {name:"Kolumbien",flag:"🇨🇴",code:"COL",group:"K",start:861},
+  {name:"England",flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿",code:"ENG",group:"L",start:881},
+  {name:"Kroatien",flag:"🇭🇷",code:"CRO",group:"L",start:901},
+  {name:"Ghana",flag:"🇬🇭",code:"GHA",group:"L",start:921},
+  {name:"Panama",flag:"🇵🇦",code:"PAN",group:"L",start:941},
+];
+
+const TOTAL = COUNTRIES.length * 20; // 960
+let myData = {}; // { "USA-3": 1 (owned) | 2 (double) }
+let currentUser = '';
+let firebaseUrl = '';
+let apiKey = '';
+let currentTab = 'collection';
+let currentFilter = 'all';
+let allUsersData = {};
+let saveTimeout = null;
+
+// ============================================================
+// SETUP
+// ============================================================
+function toggleGuide() {
+  const box = document.getElementById('guide-box');
+  box.classList.toggle('open');
+}
+
+function startApp() {
+  const name = document.getElementById('setup-name').value.trim();
+  const fb = document.getElementById('setup-firebase').value.trim();
+  const ak = document.getElementById('setup-apikey').value.trim();
+  if (!name) { alert('Bitte gib deinen Namen ein!'); return; }
+  currentUser = name;
+  firebaseUrl = fb.replace(/\/$/, '');
+  apiKey = ak;
+  localStorage.setItem('panini_user', name);
+  localStorage.setItem('panini_firebase', fb);
+  if (ak) localStorage.setItem('panini_apikey', ak);
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'flex';
+  document.getElementById('header-user').textContent = name;
+  document.getElementById('api-key-input').value = ak;
+  loadMyData();
+}
+
+function logout() {
+  if (confirm('Zurück zu den Einstellungen? Deine Daten bleiben gespeichert.')) {
+    document.getElementById('app-screen').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'flex';
+    document.getElementById('setup-name').value = currentUser;
+    document.getElementById('setup-firebase').value = firebaseUrl;
+  }
+}
+
+// Pre-fill from localStorage
+window.addEventListener('DOMContentLoaded', () => {
+  const n = localStorage.getItem('panini_user');
+  const f = localStorage.getItem('panini_firebase');
+  const a = localStorage.getItem('panini_apikey');
+  if (n) document.getElementById('setup-name').value = n;
+  if (f) document.getElementById('setup-firebase').value = f;
+  if (a) document.getElementById('setup-apikey').value = a;
+  if (n && f) startApp();
+});
+
+// ============================================================
+// STICKER DATA
+// ============================================================
+function buildStickers(c) {
+  const arr = [];
+  for (let i = 1; i <= 20; i++) arr.push({ id: `${c.code}-${i}`, num: i, globalNum: c.start + i - 1 });
+  return arr;
+}
+const ALL_IDS = COUNTRIES.flatMap(c => buildStickers(c).map(s => s.id));
+
+function getSt(id) { return myData[id] || 0; }
+
+function cycleSt(id) {
+  myData[id] = (getSt(id) + 1) % 3;
+  debounceSave();
+  updateStats();
+  if (currentTab === 'collection') { const btn = document.querySelector(`[data-id="${id}"]`); if (btn) applyBtn(btn, id); }
+  if (currentTab === 'missing') renderMissing();
+  if (currentTab === 'doubles') renderDoubles();
+}
+
+function applyBtn(btn, id) {
+  const st = getSt(id);
+  btn.className = 'sbtn' + (st === 1 ? ' owned' : st === 2 ? ' double' : '');
+}
+
+function debounceSave() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => saveMyData(), 800);
+}
+
+// ============================================================
+// FIREBASE
+// ============================================================
+function userKey() { return currentUser.toLowerCase().replace(/[^a-z0-9]/g, '_'); }
+
+async function saveMyData() {
+  // Always save locally
+  localStorage.setItem('panini_data_' + userKey(), JSON.stringify(myData));
+  if (!firebaseUrl) return;
+  try {
+    await fetch(`${firebaseUrl}/users/${userKey()}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: currentUser, data: myData, updated: Date.now() })
+    });
+  } catch (e) { console.warn('Firebase save failed:', e); }
+}
+
+async function loadMyData() {
+  // Try Firebase first
+  if (firebaseUrl) {
+    try {
+      const r = await fetch(`${firebaseUrl}/users/${userKey()}.json`);
+      const json = await r.json();
+      if (json && json.data) { myData = json.data; updateStats(); renderCollection(); return; }
+    } catch (e) {}
+  }
+  // Fallback: localStorage
+  const local = localStorage.getItem('panini_data_' + userKey());
+  if (local) myData = JSON.parse(local);
+  updateStats();
+  renderCollection();
+}
+
+async function loadAllUsers() {
+  allUsersData = {};
+  if (!firebaseUrl) return;
+  try {
+    const r = await fetch(`${firebaseUrl}/users.json`);
+    const json = await r.json();
+    if (json) {
+      for (const [k, v] of Object.entries(json)) {
+        if (k !== userKey() && v && v.data) allUsersData[v.name || k] = v.data;
+      }
+    }
+  } catch (e) { console.warn('Firebase load failed:', e); }
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function updateStats() {
+  let owned = 0, doubles = 0;
+  Object.values(myData).forEach(v => { if (v === 1) owned++; if (v === 2) { owned++; doubles++; } });
+  const missing = TOTAL - owned;
+  document.getElementById('st-total').textContent = TOTAL;
+  document.getElementById('st-owned').textContent = owned;
+  document.getElementById('st-missing').textContent = missing;
+  document.getElementById('st-doubles').textContent = doubles;
+  document.getElementById('st-pct').textContent = Math.round(owned / TOTAL * 100) + '%';
+  document.getElementById('gbar').style.width = Math.round(owned / TOTAL * 100) + '%';
+}
+
+// ============================================================
+// COLLECTION TAB
+// ============================================================
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderCollection();
+}
+
+function renderCollection() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const groups = [...new Set(COUNTRIES.map(c => c.group))];
+  let html = '';
+  for (const g of groups) {
+    const filtered = COUNTRIES.filter(c => {
+      if (q && !c.name.toLowerCase().includes(q) && !c.code.toLowerCase().includes(q)) return false;
+      const stickers = buildStickers(c);
+      const owned = stickers.filter(s => getSt(s.id) >= 1).length;
+      if (currentFilter === 'complete') return owned === 20;
+      if (currentFilter === 'incomplete') return owned < 20;
+      return true;
+    });
+    if (!filtered.length) continue;
+    html += `<div class="group-label">Gruppe ${g}</div>`;
+    for (const c of filtered) {
+      const stickers = buildStickers(c);
+      const owned = stickers.filter(s => getSt(s.id) >= 1).length;
+      const pct = Math.round(owned / 20 * 100);
+      const btns = stickers.map(s => {
+        const st = getSt(s.id);
+        const cls = st === 1 ? ' owned' : st === 2 ? ' double' : '';
+        return `<button class="sbtn${cls}" data-id="${s.id}" onclick="cycleSt('${s.id}')" title="Sticker #${s.globalNum} (${s.id})">${s.num}</button>`;
+      }).join('');
+      html += `<div class="ccard">
+        <div class="ccard-header">
+          <div class="ccard-name"><span class="cflag">${c.flag}</span>${c.name}</div>
+          <div class="ccard-nums">${owned}/20 · #${c.start}–${c.start + 19}</div>
+        </div>
+        <div class="cpbar"><div class="cpbar-fill" style="width:${pct}%"></div></div>
+        <div class="stickers-row">${btns}</div>
+      </div>`;
+    }
+  }
+  document.getElementById('cgrid').innerHTML = html || '<div class="no-result">Kein Land gefunden.</div>';
+}
+
+// ============================================================
+// MISSING / DOUBLES TABS
+// ============================================================
+function renderMissing() {
+  const chips = [];
+  COUNTRIES.forEach(c => buildStickers(c).forEach(s => { if (getSt(s.id) === 0) chips.push(`<span class="chip">#${s.globalNum} ${s.id}</span>`); }));
+  document.getElementById('missing-list').innerHTML = chips.length ? chips.join('') : '<span style="color:var(--green);font-weight:600">🎉 Alle Sticker vorhanden!</span>';
+}
+
+function renderDoubles() {
+  const chips = [];
+  COUNTRIES.forEach(c => buildStickers(c).forEach(s => { if (getSt(s.id) === 2) chips.push(`<span class="chip offer">#${s.globalNum} ${s.id}</span>`); }));
+  document.getElementById('doubles-list').innerHTML = chips.length ? chips.join('') : '<div class="no-result">Noch keine Doppelten eingetragen.</div>';
+}
+
+// ============================================================
+// TRADE TAB
+// ============================================================
+async function renderTrade() {
+  document.getElementById('trade-loading').style.display = 'block';
+  document.getElementById('trade-content').style.display = 'none';
+  await loadAllUsers();
+  document.getElementById('trade-loading').style.display = 'none';
+  document.getElementById('trade-content').style.display = 'flex';
+
+  const myDoubles = new Set(ALL_IDS.filter(id => getSt(id) === 2));
+  const myMissing = new Set(ALL_IDS.filter(id => getSt(id) === 0));
+  const others = Object.entries(allUsersData);
+
+  if (!others.length) {
+    document.getElementById('trade-content').innerHTML = `<div class="no-result">
+      ${firebaseUrl ? '😕 Noch keine anderen Sammler eingetragen.' : '⚠️ Keine Firebase-URL angegeben — Tauschbörse funktioniert nur mit Firebase.'}<br><br>
+      Teile die App-URL mit deinen Freunden, damit sie sich einloggen und ihre Sticker eintragen können!
+    </div>`;
+    return;
+  }
+
+  let html = '';
+  for (const [name, data] of others) {
+    const theirDoubles = new Set(ALL_IDS.filter(id => (data[id] || 0) === 2));
+    const theirMissing = new Set(ALL_IDS.filter(id => (data[id] || 0) === 0));
+    const iCanGive = [...myDoubles].filter(id => theirMissing.has(id));
+    const theyCanGive = [...theirDoubles].filter(id => myMissing.has(id));
+    if (!iCanGive.length && !theyCanGive.length) continue;
+
+    html += `<div class="trade-card"><h3>🤝 Tausch mit <strong>${name}</strong></h3>`;
+    if (iCanGive.length && theyCanGive.length) html += `<div class="match-badge">↕ ${iCanGive.length + theyCanGive.length} Tauschkarten möglich</div>`;
+    if (theyCanGive.length) {
+      html += `<div class="trade-sub">⬇ Du kannst bekommen von ${name} (${theyCanGive.length})</div><div class="chips">`;
+      html += theyCanGive.slice(0, 50).map(id => { const c = COUNTRIES.find(x => id.startsWith(x.code + '-')); const n = id.split('-')[1]; return `<span class="chip offer">#${c ? c.start + parseInt(n) - 1 : '?'} ${id}</span>`; }).join('');
+      if (theyCanGive.length > 50) html += `<span class="chip">+${theyCanGive.length - 50} weitere</span>`;
+      html += '</div>';
+    }
+    if (iCanGive.length) {
+      html += `<div class="trade-sub">⬆ Du kannst geben an ${name} (${iCanGive.length})</div><div class="chips">`;
+      html += iCanGive.slice(0, 50).map(id => { const c = COUNTRIES.find(x => id.startsWith(x.code + '-')); const n = id.split('-')[1]; return `<span class="chip want">#${c ? c.start + parseInt(n) - 1 : '?'} ${id}</span>`; }).join('');
+      if (iCanGive.length > 50) html += `<span class="chip">+${iCanGive.length - 50} weitere</span>`;
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  if (!html) html = '<div class="no-result">Keine passenden Tauschpartner gefunden.<br>Sobald Freunde ihre Doppelten eingetragen haben, erscheinen hier Vorschläge!</div>';
+  document.getElementById('trade-content').innerHTML = html;
+}
+
+// ============================================================
+// SCAN TAB — FOTO ERKENNUNG
+// ============================================================
+let currentImageBase64 = null;
+
+function saveApiKey() {
+  apiKey = document.getElementById('api-key-input').value.trim();
+  localStorage.setItem('panini_apikey', apiKey);
+  alert('API Key gespeichert!');
+}
+
+function handleDragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag'); }
+function handleDragLeave(e) { document.getElementById('upload-zone').classList.remove('drag'); }
+function handleDrop(e) { e.preventDefault(); document.getElementById('upload-zone').classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); }
+
+function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    currentImageBase64 = dataUrl.split(',')[1];
+    const preview = document.getElementById('preview-img');
+    preview.src = dataUrl;
+    preview.style.display = 'block';
+    document.getElementById('scan-btn').style.display = 'inline-block';
+    document.getElementById('scan-result').style.display = 'none';
+    document.getElementById('scan-error').style.display = 'none';
+    document.getElementById('apikey-note').style.display = apiKey ? 'none' : 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function scanImage() {
+  if (!currentImageBase64) return;
+  if (!apiKey) { document.getElementById('apikey-note').style.display = 'block'; return; }
+
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Analysiere…';
+  document.getElementById('scan-result').style.display = 'none';
+  document.getElementById('scan-error').style.display = 'none';
+
+  const countryList = COUNTRIES.map(c => `${c.code} (${c.name}, Sticker #${c.start}-${c.start+19})`).join(', ');
+
+  const prompt = `Du siehst eine aufgeschlagene Seite eines Panini WM 2026 Sticker-Albums.
+
+Deine Aufgabe: Erkenne welche Sticker-Plätze eingeklebt (gefüllt) und welche leer (nicht eingeklebt) sind.
+
+Die Sticker im Album sind nummeriert. Jedes Land hat 20 Sticker.
+Länder und ihre Stickernummern: ${countryList}
+
+Analysiere das Bild sorgfältig:
+- Eingeklebte Sticker: zeigen ein Spielerfoto oder ein Bild
+- Leere Sticker-Plätze: zeigen nur eine leere Fläche mit einer Nummer
+
+Antworte NUR mit einem JSON-Objekt in diesem exakten Format:
+{
+  "owned": ["CODE-1", "CODE-2", ...],
+  "missing": ["CODE-3", "CODE-4", ...]
+}
+
+Dabei ist CODE das Länderkürzel (z.B. USA, GER, FRA) und die Zahl die Stickernummer innerhalb des Landes (1-20).
+Schreibe nichts außer dem JSON.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: currentImageBase64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || 'API-Fehler ' + response.status);
+    }
+
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+
+    let result;
+    try {
+      const clean = text.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch (e) { throw new Error('KI-Antwort konnte nicht verarbeitet werden. Bitte erneut versuchen.'); }
+
+    const owned = result.owned || [];
+    const missing = result.missing || [];
+
+    // Apply to myData
+    let appliedOwned = 0, appliedMissing = 0;
+    for (const id of owned) {
+      if (ALL_IDS.includes(id)) {
+        if (getSt(id) === 0) { myData[id] = 1; appliedOwned++; }
+      }
+    }
+    // missing ones: only reset if currently marked owned (don't override doubles)
+    // We leave missing alone - user might have manually marked them
+
+    saveMyData();
+    updateStats();
+    renderCollection();
+
+    const resultDiv = document.getElementById('scan-result');
+    document.getElementById('scan-result-text').innerHTML =
+      `<strong>${appliedOwned}</strong> neue Sticker als vorhanden markiert.<br>
+       <strong>${owned.length}</strong> eingeklebte Sticker erkannt.<br>
+       <strong>${missing.length}</strong> leere Plätze erkannt.<br><br>
+       <em>Tipp: Überprüfe die Ergebnisse und korrigiere sie manuell falls nötig.</em>`;
+    resultDiv.style.display = 'block';
+
+    document.getElementById('scan-modal').classList.add('open');
+    document.getElementById('modal-text').textContent = `${appliedOwned} neue Sticker wurden als vorhanden markiert. ${owned.length} Sticker erkannt, ${missing.length} leere Plätze.`;
+
+  } catch (e) {
+    const err = document.getElementById('scan-error');
+    err.textContent = '❌ Fehler: ' + e.message;
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Sticker erkennen';
+  }
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['collection', 'scan', 'missing', 'doubles', 'trade'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'missing') renderMissing();
+  if (tab === 'doubles') renderDoubles();
+  if (tab === 'trade') renderTrade();
+}
+</script>
+</body>
+</html>
